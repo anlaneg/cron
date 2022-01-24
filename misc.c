@@ -60,23 +60,40 @@ glue_strings(char *buffer, size_t buffer_size, const char *a, const char *b,
 	char *buf_end;
 
 	if (buffer_size <= 0)
+		/*buffer size不能为0*/
 		return (0);
+	/*buffer结尾位置*/
 	buf_end = buffer + buffer_size;
 	buf = buffer;
 
+	/*复制a到buffer中*/
 	for ( /* nothing */; buf < buf_end && *a != '\0'; buf++, a++ )
 		*buf = *a;
+
+	/*a太长，导致buffer满了*/
 	if (buf == buf_end)
 		return (0);
+
+	/*a为空或者，a不是能'/'结尾的，或者separator不为'/',添加separator*/
 	if (separator != '/' || buf == buffer || buf[-1] != '/')
 		*buf++ = separator;
+
+	/*buffer满了*/
 	if (buf == buf_end)
 		return (0);
+
+	/*复制b到bffer*/
 	for ( /* nothing */; buf < buf_end && *b != '\0'; buf++, b++ )
 		*buf = *b;
+
+	/*buffer满了*/
 	if (buf == buf_end)
 		return (0);
+
+	/*指定buffer结尾*/
 	*buf = '\0';
+
+	/*返回1，表明操作成功*/
 	return (1);
 }
 
@@ -200,6 +217,7 @@ set_cron_uid(void) {
 #endif
 }
 
+/*变更工作目录，并创建spool_dir*/
 void
 set_cron_cwd(void) {
 	struct stat sb;
@@ -212,6 +230,7 @@ set_cron_cwd(void) {
 	 */
 	if (stat(CRONDIR, &sb) < OK && errno == ENOENT) {
 		perror(CRONDIR);
+		/*创建crondir*/
 		if (OK == mkdir(CRONDIR, 0710)) {
 			fprintf(stderr, "%s: created\n", CRONDIR);
 			stat(CRONDIR, &sb);
@@ -226,6 +245,8 @@ set_cron_cwd(void) {
 			CRONDIR);
 		exit(ERROR_EXIT);
 	}
+
+	/*更新当前工作目录为condir*/
 	if (chdir(CRONDIR) < OK) {
 		fprintf(stderr, "cannot chdir(%s), bailing out.\n", CRONDIR);
 		perror(CRONDIR);
@@ -236,6 +257,7 @@ set_cron_cwd(void) {
 	 */
 	if (stat(SPOOL_DIR, &sb) < OK && errno == ENOENT) {
 		perror(SPOOL_DIR);
+		/*在crondir位置创建spool_dir*/
 		if (OK == mkdir(SPOOL_DIR, 0700)) {
 			fprintf(stderr, "%s: created\n", SPOOL_DIR);
 			stat(SPOOL_DIR, &sb);
@@ -358,6 +380,7 @@ unget_char(int ch, FILE *file) {
  */
 int
 get_string(char *string, int size, FILE *file, char *terms) {
+	/*自file中最多读取size个字节，以terms字符进行划分*/
 	int ch;
 
 	while (EOF != (ch = get_char(file)) && !strchr(terms, ch)) {
@@ -448,12 +471,15 @@ allowed(const char *username, const char *allow_file, const char *deny_file) {
 	int	isallowed;
 
 	if (strcmp(username, ROOT_USER) == 0)
+		/*root总被容许*/
 		return (TRUE);
 	isallowed = FALSE;
+	/*检查username是否在allow_file中*/
 	if ((fp = fopen(allow_file, "r")) != NULL) {
 		isallowed = in_file(username, fp, FALSE);
 		fclose(fp);
 	} else if ((fp = fopen(deny_file, "r")) != NULL) {
+		/*检查username是否在deny_file中*/
 		isallowed = !in_file(username, fp, FALSE);
 		fclose(fp);
 	}

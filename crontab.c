@@ -40,11 +40,13 @@ static char	*getoptargs = "u:lerx:";
 static char	*getoptargs = "u:ler";
 #endif
 
-static	PID_T		Pid;
+static	PID_T		Pid;/*当前进程id*/
+/*进程关联用户名*/
 static	char		User[MAX_UNAME], RealUser[MAX_UNAME];
 static	char		Filename[MAX_FNAME], TempFilename[MAX_FNAME];
 static	FILE		*NewCrontab;
 static	int		CheckErrorCount;
+/*指定的操作*/
 static	enum opt_t	Option;
 static	struct passwd	*pw;
 static	void		list_cmd(void),
@@ -68,10 +70,12 @@ usage(const char *msg) {
 	exit(ERROR_EXIT);
 }
 
+/*crontab入口*/
 int
 main(int argc, char *argv[]) {
 	int exitstatus;
 
+	/*取当前进程id*/
 	Pid = getpid();
 	ProgramName = argv[0];
 
@@ -80,8 +84,12 @@ main(int argc, char *argv[]) {
 #if defined(BSD)
 	setlinebuf(stderr);
 #endif
+
+	/*解析命令行*/
 	parse_args(argc, argv);		/* sets many globals, opens a file */
 	set_cron_cwd();
+
+	/*检查当前用户是否可以使用此程序*/
 	if (!allowed(RealUser, CRON_ALLOW, CRON_DENY)) {
 		fprintf(stderr,
 			"You (%s) are not allowed to use this program (%s)\n",
@@ -90,21 +98,28 @@ main(int argc, char *argv[]) {
 		log_it(RealUser, Pid, "AUTH", "crontab command not allowed");
 		exit(ERROR_EXIT);
 	}
+
+	/*按option，执行相应的操作*/
 	exitstatus = OK_EXIT;
 	switch (Option) {
 	case opt_unknown:
+		/*不认识的操作，退出*/
 		exitstatus = ERROR_EXIT;
 		break;
 	case opt_list:
+		/*执行list cmd*/
 		list_cmd();
 		break;
+		/*执行cron删除*/
 	case opt_delete:
 		delete_cmd();
 		break;
 	case opt_edit:
+		/*执行cron编辑*/
 		edit_cmd();
 		break;
 	case opt_replace:
+		/*执行cron替换*/
 		if (replace_cmd() < 0)
 			exitstatus = ERROR_EXIT;
 		break;
@@ -115,6 +130,7 @@ main(int argc, char *argv[]) {
 	/*NOTREACHED*/
 }
 
+/*解析参数*/
 static void
 parse_args(int argc, char *argv[]) {
 	int argch;
@@ -143,10 +159,13 @@ parse_args(int argc, char *argv[]) {
 #endif
 		case 'u':
 			if (MY_UID(pw) != ROOT_UID) {
+				/*当前非root,报错*/
 				fprintf(stderr,
 					"must be privileged to use -u\n");
 				exit(ERROR_EXIT);
 			}
+
+			/*不认识的用户*/
 			if (!(pw = getpwnam(optarg))) {
 				fprintf(stderr, "%s:  user `%s' unknown\n",
 					ProgramName, optarg);
@@ -154,19 +173,23 @@ parse_args(int argc, char *argv[]) {
 			}
 			if (strlen(optarg) >= sizeof User)
 				usage("username too long");
+			/*设置-u参数指定的用户名*/
 			(void) strcpy(User, optarg);
 			break;
 		case 'l':
+			/*指定list操作*/
 			if (Option != opt_unknown)
 				usage("only one operation permitted");
 			Option = opt_list;
 			break;
 		case 'r':
+			/*指定delete操作*/
 			if (Option != opt_unknown)
 				usage("only one operation permitted");
 			Option = opt_delete;
 			break;
 		case 'e':
+			/*执行edit操作*/
 			if (Option != opt_unknown)
 				usage("only one operation permitted");
 			Option = opt_edit;
@@ -180,12 +203,15 @@ parse_args(int argc, char *argv[]) {
 
 	if (Option != opt_unknown) {
 		if (argv[optind] != NULL)
+			/*操作之后不容许有其它参数*/
 			usage("no arguments permitted after this option");
 	} else {
 		if (argv[optind] != NULL) {
+			/*替换操作*/
 			Option = opt_replace;
 			if (strlen(argv[optind]) >= sizeof Filename)
 				usage("filename too long");
+			/*replace操作参数*/
 			(void) strcpy (Filename, argv[optind]);
 		} else
 			usage("file name must be specified for replace");
@@ -197,6 +223,7 @@ parse_args(int argc, char *argv[]) {
 		 * reading the file.
 		 */
 		if (!strcmp(Filename, "-"))
+			/*输入来自于标准输入*/
 			NewCrontab = stdin;
 		else {
 			/* relinquish the setuid status of the binary during
@@ -211,6 +238,7 @@ parse_args(int argc, char *argv[]) {
 				perror("swapping uids");
 				exit(ERROR_EXIT);
 			}
+			/*读取此文件*/
 			if (!(NewCrontab = fopen(Filename, "r"))) {
 				perror(Filename);
 				exit(ERROR_EXIT);
@@ -232,11 +260,16 @@ list_cmd(void) {
 	FILE *f;
 	int ch;
 
+	/*记录user通过某个进程执行list操作*/
 	log_it(RealUser, Pid, "LIST", User);
+
+	/*构造 spool_dir/user 路径串*/
 	if (!glue_strings(n, sizeof n, SPOOL_DIR, User, '/')) {
 		fprintf(stderr, "path too long\n");
 		exit(ERROR_EXIT);
 	}
+
+	/*打开此文件，如果文件不存在，则直接返回*/
 	if (!(f = fopen(n, "r"))) {
 		if (errno == ENOENT)
 			fprintf(stderr, "no crontab for %s\n", User);
@@ -248,6 +281,7 @@ list_cmd(void) {
 	/* file is open. copy to stdout, close.
 	 */
 	Set_LineNum(1)
+	/*显示文件内容*/
 	while (EOF != (ch = get_char(f)))
 		putchar(ch);
 	fclose(f);
@@ -278,6 +312,7 @@ check_error(const char *msg) {
 	fprintf(stderr, "\"%s\":%d: %s\n", Filename, LineNumber-1, msg);
 }
 
+/*执行crontab的编辑*/
 static void
 edit_cmd(void) {
 	char n[MAX_FNAME], q[MAX_TEMPSTR], *editor;
@@ -288,16 +323,23 @@ edit_cmd(void) {
 	WAIT_T waiter;
 	PID_T pid, xpid;
 
+	/*记录用户通过某个进程进行edit*/
 	log_it(RealUser, Pid, "BEGIN EDIT", User);
+
+	/*构造spool_dir/usr目录*/
 	if (!glue_strings(n, sizeof n, SPOOL_DIR, User, '/')) {
 		fprintf(stderr, "path too long\n");
 		exit(ERROR_EXIT);
 	}
+
+	/*打开文件$n*/
 	if (!(f = fopen(n, "r"))) {
 		if (errno != ENOENT) {
 			perror(n);
 			exit(ERROR_EXIT);
 		}
+
+		/*文件不存在，打开/dev/null*/
 		fprintf(stderr, "no crontab for %s - using an empty one\n",
 			User);
 		if (!(f = fopen(_PATH_DEVNULL, "r"))) {
@@ -318,15 +360,20 @@ edit_cmd(void) {
 	(void)signal(SIGINT, SIG_IGN);
 	(void)signal(SIGQUIT, SIG_IGN);
 
+	/*构造路径/tmp/crontab.xxxx路径*/
 	if (!glue_strings(Filename, sizeof Filename, _PATH_TMP,
 	    "crontab.XXXXXXXXXX", '/')) {
 		fprintf(stderr, "path too long\n");
 		goto fatal;
 	}
+
+	/*创建临时文件*/
 	if (-1 == (t = mkstemp(Filename))) {
 		perror(Filename);
 		goto fatal;
 	}
+
+	/*变更临时文件的owner*/
 #ifdef HAS_FCHOWN
 	if (fchown(t, MY_UID(pw), MY_GID(pw)) < 0) {
 		perror("fchown");
@@ -338,6 +385,8 @@ edit_cmd(void) {
 		goto fatal;
 	}
 #endif
+
+	/*打开此临时文件*/
 	if (!(NewCrontab = fdopen(t, "r+"))) {
 		perror("fdopen");
 		goto fatal;
@@ -349,10 +398,12 @@ edit_cmd(void) {
 	 */
 	x = 0;
 	while (EOF != (ch = get_char(f))) {
+		/*执行文件复制*/
 		if ('#' != ch) {
 			putc(ch, NewCrontab);
 			break;
 		}
+		/*跳过注释行*/
 		while (EOF != (ch = get_char(f)))
 			if (ch == '\n')
 				break;
@@ -381,6 +432,7 @@ edit_cmd(void) {
 		exit(ERROR_EXIT);
 	}
 
+	/*取系统默认editor*/
 	if (((editor = getenv("VISUAL")) == NULL || *editor == '\0') &&
 	    ((editor = getenv("EDITOR")) == NULL || *editor == '\0')) {
 		editor = EDITOR;
@@ -412,6 +464,8 @@ edit_cmd(void) {
 			perror(_PATH_TMP);
 			exit(ERROR_EXIT);
 		}
+
+		/*执行编辑器程序*/
 		if (!glue_strings(q, sizeof q, editor, Filename, ' ')) {
 			fprintf(stderr, "%s: editor command line too long\n",
 			    ProgramName);
@@ -428,6 +482,7 @@ edit_cmd(void) {
 
 	/* parent */
 	for (;;) {
+		/*等待编辑器退出*/
 		xpid = waitpid(pid, &waiter, WUNTRACED);
 		if (xpid == -1) {
 			if (errno != EINTR)
@@ -522,12 +577,15 @@ replace_cmd(void) {
 		return (-2);
 	}
 
+	/*构造路径spool_dir/tmp.xxxx*/
 	if (!glue_strings(TempFilename, sizeof TempFilename, SPOOL_DIR,
 	    "tmp.XXXXXXXXXX", '/')) {
 		TempFilename[0] = '\0';
 		fprintf(stderr, "path too long\n");
 		return (-2);
 	}
+
+	/*创建临时文件，并打开文件*/
 	if ((fd = mkstemp(TempFilename)) == -1 || !(tmp = fdopen(fd, "w+"))) {
 		perror(TempFilename);
 		if (fd != -1) {
@@ -554,8 +612,11 @@ replace_cmd(void) {
 	 */
 	rewind(NewCrontab);
 	Set_LineNum(1)
+	/*自NewCrontab中读取内容，并将其写入到tmp中*/
 	while (EOF != (ch = get_char(NewCrontab)))
 		putc(ch, tmp);
+
+	/*完成文件写入*/
 	ftruncate(fileno(tmp), ftell(tmp));	/* XXX redundant with "w+"? */
 	fflush(tmp);  rewind(tmp);
 
@@ -577,8 +638,10 @@ replace_cmd(void) {
 	Set_LineNum(1 - NHEADER_LINES)
 	CheckErrorCount = 0;  eof = FALSE;
 	while (!CheckErrorCount && !eof) {
+		/*先认为envstr为环境变量，进行识别，如果true,则假设成立，如果false,则假设不成立，如果err，则格式有误*/
 		switch (load_env(envstr, tmp)) {
 		case ERR:
+			/*出错*/
 			/* check for data before the EOF */
 			if (envstr[0] != '\0') {
 				Set_LineNum(LineNumber + 1);
@@ -587,8 +650,10 @@ replace_cmd(void) {
 			eof = TRUE;
 			break;
 		case FALSE:
+			/*识别发现非env,进行cron配置识别*/
 			e = load_entry(tmp, check_error, pw, envp);
 			if (e)
+				/*解析entry成功，释放*/
 				free(e);
 			break;
 		case TRUE:

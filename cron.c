@@ -52,6 +52,7 @@ usage(void) {
 	exit(ERROR_EXIT);
 }
 
+/*cron后台程序入口*/
 int
 main(int argc, char *argv[]) {
 	struct sigaction sact;
@@ -68,6 +69,7 @@ main(int argc, char *argv[]) {
 #endif
 
 	NoFork = 0;
+	/*解析参数*/
 	parse_args(argc, argv);
 
 	bzero((char *)&sact, sizeof sact);
@@ -88,6 +90,7 @@ main(int argc, char *argv[]) {
 	set_cron_uid();
 	set_cron_cwd();
 
+	/*定义PATH,以便进行程序查找*/
 	if (putenv("PATH="_PATH_DEFPATH) < 0) {
 		log_it("CRON", getpid(), "DEATH", "can't malloc");
 		exit(1);
@@ -278,7 +281,9 @@ run_reboot_jobs(cron_db *db) {
 
 static void
 find_jobs(int vtime, cron_db *db, int doWild, int doNonWild) {
+	/*换算成秒*/
 	time_t virtualSecond  = vtime * SECONDS_PER_MINUTE;
+	/*换算成时间格式*/
 	struct tm *tm = gmtime(&virtualSecond);
 	int minute, hour, dom, month, dow;
 	user *u;
@@ -292,6 +297,7 @@ find_jobs(int vtime, cron_db *db, int doWild, int doNonWild) {
 	month = tm->tm_mon +1 /* 0..11 -> 1..12 */ -FIRST_MONTH;
 	dow = tm->tm_wday -FIRST_DOW;
 
+	/*当时virtualsecond对应的时间*/
 	Debug(DSCH, ("[%ld] tick(%d,%d,%d,%d,%d) %s %s\n",
 		     (long)getpid(), minute, hour, dom, month, dow,
 		     doWild?" ":"No wildcard",doNonWild?" ":"Wildcard only"))
@@ -302,19 +308,24 @@ find_jobs(int vtime, cron_db *db, int doWild, int doNonWild) {
 	 * is why we keep 'e->dow_star' and 'e->dom_star'.  yes, it's bizarre.
 	 * like many bizarre things, it's the standard.
 	 */
+	/*遍历不同的user*/
 	for (u = db->head; u != NULL; u = u->next) {
+		/*遍历不同user提定的crontab*/
 		for (e = u->crontab; e != NULL; e = e->next) {
 			Debug(DSCH|DEXT, ("user [%s:%ld:%ld:...] cmd=\"%s\"\n",
 			    e->pwd->pw_name, (long)e->pwd->pw_uid,
 			    (long)e->pwd->pw_gid, e->cmd))
+			/*如果此minute,hour,month均被标记为1，且*/
 			if (bit_test(e->minute, minute) &&
 			    bit_test(e->hour, hour) &&
 			    bit_test(e->month, month) &&
 			    ( ((e->flags & DOM_STAR) || (e->flags & DOW_STAR))
-			      ? (bit_test(e->dow,dow) && bit_test(e->dom,dom))
-			      : (bit_test(e->dow,dow) || bit_test(e->dom,dom))
+			      ? (bit_test(e->dow,dow) && bit_test(e->dom,dom))/*day of week，day of month有一个为*时，需要均命中*/
+			      : (bit_test(e->dow,dow) || bit_test(e->dom,dom))/*或者两个中有一个命中*/
 			    )
 			   ) {
+				/*doNonWild时，e不能有min_star及hr_star*/
+				/*dowild时，e必须有min_star,hr_star*/
 				if ((doNonWild &&
 				    !(e->flags & (MIN_STAR|HR_STAR))) || 
 				    (doWild && (e->flags & (MIN_STAR|HR_STAR))))
@@ -440,6 +451,7 @@ parse_args(int argc, char *argv[]) {
 				usage();
 			break;
 		case 'n':
+			/*指明不进行fork*/
 			NoFork = 1;
 			break;
 		}

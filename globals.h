@@ -60,6 +60,7 @@ XTRN const char *DowNames[]
 #endif
 	;
 
+/*当前程序名称*/
 XTRN char	*ProgramName INIT("amnesia");
 XTRN int	LineNumber INIT(0);
 XTRN time_t	StartTime INIT(0);

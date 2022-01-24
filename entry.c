@@ -88,8 +88,10 @@ load_entry(FILE *file, void (*error_func)(), struct passwd *pw, char **envp) {
 
 	Debug(DPARS, ("load_entry()...about to eat comments\n"))
 
+	/*跳过注释行*/
 	skip_comments(file);
 
+	/*读取一个字符*/
 	ch = get_char(file);
 	if (ch == EOF)
 		return (NULL);
@@ -99,6 +101,7 @@ load_entry(FILE *file, void (*error_func)(), struct passwd *pw, char **envp) {
 	 * of a list of minutes.
 	 */
 
+	/*申请一个entry*/
 	e = (entry *) calloc(sizeof(entry), sizeof(char));
 
 	if (ch == '@') {
@@ -114,10 +117,12 @@ load_entry(FILE *file, void (*error_func)(), struct passwd *pw, char **envp) {
 		 * anymore.  too much for my overloaded brain. (vix, jan90)
 		 * HINT
 		 */
-		ch = get_string(cmd, MAX_COMMAND, file, " \t\n");
+		ch = get_string(cmd, MAX_COMMAND, file, " \t\n");/*读取一个字段*/
 		if (!strcmp("reboot", cmd)) {
+			/*cmd为reboot,指在reboot时触发*/
 			e->flags |= WHEN_REBOOT;
 		} else if (!strcmp("yearly", cmd) || !strcmp("annually", cmd)){
+			/*cmd为yearly或者annually,将时间清0*/
 			bit_set(e->minute, 0);
 			bit_set(e->hour, 0);
 			bit_set(e->dom, 0);
@@ -125,26 +130,34 @@ load_entry(FILE *file, void (*error_func)(), struct passwd *pw, char **envp) {
 			bit_nset(e->dow, 0, (LAST_DOW-FIRST_DOW+1));
 			e->flags |= DOW_STAR;
 		} else if (!strcmp("monthly", cmd)) {
+			/*cmd为mothly时，将时间清0*/
 			bit_set(e->minute, 0);
 			bit_set(e->hour, 0);
 			bit_set(e->dom, 0);
+			/*将month标为1*/
 			bit_nset(e->month, 0, (LAST_MONTH-FIRST_MONTH+1));
+			/*将day of week标为1*/
 			bit_nset(e->dow, 0, (LAST_DOW-FIRST_DOW+1));
 			e->flags |= DOW_STAR;
 		} else if (!strcmp("weekly", cmd)) {
+			/*cmd为weekly时*/
 			bit_set(e->minute, 0);
 			bit_set(e->hour, 0);
+			/*将month标为1*/
 			bit_nset(e->dom, 0, (LAST_DOM-FIRST_DOM+1));
+			/*将day of week标为1*/
 			bit_nset(e->month, 0, (LAST_MONTH-FIRST_MONTH+1));
 			bit_set(e->dow, 0);
 			e->flags |= DOW_STAR;
 		} else if (!strcmp("daily", cmd) || !strcmp("midnight", cmd)) {
+			/*cmd为daily,midnight时，day of month,month,day of week均标1*/
 			bit_set(e->minute, 0);
 			bit_set(e->hour, 0);
 			bit_nset(e->dom, 0, (LAST_DOM-FIRST_DOM+1));
 			bit_nset(e->month, 0, (LAST_MONTH-FIRST_MONTH+1));
 			bit_nset(e->dow, 0, (LAST_DOW-FIRST_DOW+1));
 		} else if (!strcmp("hourly", cmd)) {
+			/*cmd为hourly时，除minute外，均标1*/
 			bit_set(e->minute, 0);
 			bit_nset(e->hour, 0, (LAST_HOUR-FIRST_HOUR+1));
 			bit_nset(e->dom, 0, (LAST_DOM-FIRST_DOM+1));
@@ -152,6 +165,7 @@ load_entry(FILE *file, void (*error_func)(), struct passwd *pw, char **envp) {
 			bit_nset(e->dow, 0, (LAST_DOW-FIRST_DOW+1));
 			e->flags |= HR_STAR;
 		} else {
+			/*不认识的time格式*/
 			ecode = e_timespec;
 			goto eof;
 		}
@@ -160,14 +174,17 @@ load_entry(FILE *file, void (*error_func)(), struct passwd *pw, char **envp) {
 		 */
 		Skip_Blanks(ch, file);
 		if (ch == EOF || ch == '\n') {
+			/*时间之后不得为空，否则格式错误，报错*/
 			ecode = e_cmd;
 			goto eof;
 		}
 	} else {
 		Debug(DPARS, ("load_entry()...about to parse numerics\n"))
 
+		/*字符为*，打start标记*/
 		if (ch == '*')
 			e->flags |= MIN_STAR;
+		/*按输入进行标记*/
 		ch = get_list(e->minute, FIRST_MINUTE, LAST_MINUTE,
 			      PPC_NULL, ch, file);
 		if (ch == EOF) {
@@ -272,10 +289,13 @@ load_entry(FILE *file, void (*error_func)(), struct passwd *pw, char **envp) {
 	/* copy and fix up environment.  some variables are just defaults and
 	 * others are overrides.
 	 */
+	/*设置传入的环境变量*/
 	if ((e->envp = env_copy(envp)) == NULL) {
 		ecode = e_memory;
 		goto eof;
 	}
+
+	/*环境变量中没有shell时，默认提供/bin/sh*/
 	if (!env_get("SHELL", e->envp)) {
 		if (glue_strings(envstr, sizeof envstr, "SHELL",
 				 _PATH_BSHELL, '=')) {
@@ -287,6 +307,8 @@ load_entry(FILE *file, void (*error_func)(), struct passwd *pw, char **envp) {
 		} else
 			log_it("CRON", getpid(), "error", "can't set SHELL");
 	}
+
+	/*环境变量中没有HOME时，设置当前用户HOME*/
 	if (!env_get("HOME", e->envp)) {
 		if (glue_strings(envstr, sizeof envstr, "HOME",
 				 pw->pw_dir, '=')) {
@@ -298,8 +320,10 @@ load_entry(FILE *file, void (*error_func)(), struct passwd *pw, char **envp) {
 		} else
 			log_it("CRON", getpid(), "error", "can't set HOME");
 	}
+
 #ifndef LOGIN_CAP
 	/* If login.conf is in used we will get the default PATH later. */
+	/*没有指定PATH,设置默认path*/
 	if (!env_get("PATH", e->envp)) {
 		if (glue_strings(envstr, sizeof envstr, "PATH",
 				 _PATH_DEFPATH, '=')) {
@@ -338,8 +362,10 @@ load_entry(FILE *file, void (*error_func)(), struct passwd *pw, char **envp) {
 	/* If the first character of the command is '-' it is a cron option.
 	 */
 	while ((ch = get_char(file)) == '-') {
+		/*首个命令字符为'-'时*/
 		switch (ch = get_char(file)) {
 		case 'q':
+			/*标明不记log*/
 			e->flags |= DONT_LOG;
 			Skip_Nonblanks(ch, file)
 			break;
@@ -349,6 +375,7 @@ load_entry(FILE *file, void (*error_func)(), struct passwd *pw, char **envp) {
 		}
 		Skip_Blanks(ch, file)
 		if (ch == EOF || ch == '\n') {
+			/*错误的结束*/
 			ecode = e_cmd;
 			goto eof;
 		}
@@ -359,7 +386,7 @@ load_entry(FILE *file, void (*error_func)(), struct passwd *pw, char **envp) {
 	 * too bad we don't know in advance how long it will be, since we
 	 * need to malloc a string for it... so, we limit it to MAX_COMMAND.
 	 */ 
-	ch = get_string(cmd, MAX_COMMAND, file, "\n");
+	ch = get_string(cmd, MAX_COMMAND, file, "\n");/*读取command,不超过1000字*/
 
 	/* a file without a \n before the EOF is rude, so we'll complain...
 	 */
@@ -396,9 +423,16 @@ load_entry(FILE *file, void (*error_func)(), struct passwd *pw, char **envp) {
 	return (NULL);
 }
 
+/*
+ * 支持以下各式：
+ * 1。单个数字
+ * 2。一个数字范围（前后包含）
+ * 3。一个数字范围且支持步进 a-b/c 指从a-b之间以c为步长进行设置
+ * 4。以逗号分隔的一组 1），2），3）数字
+ * */
 static int
-get_list(bitstr_t *bits, int low, int high, const char *names[],
-	 int ch, FILE *file)
+get_list(bitstr_t *bits, int low/*最小值*/, int high/*最大值*/, const char *names[],
+	 int ch/*输入的字符*/, FILE *file)
 {
 	int done;
 
@@ -415,15 +449,17 @@ get_list(bitstr_t *bits, int low, int high, const char *names[],
 	
 	/* clear the bit string, since the default is 'off'.
 	 */
-	bit_nclear(bits, 0, (high-low+1));
+	bit_nclear(bits, 0, (high-low+1));/*将0，high-low+1这个范围，置为0*/
 
 	/* process all ranges
 	 */
 	done = FALSE;
 	while (!done) {
+		/*按范围进行解析*/
 		if (EOF == (ch = get_range(bits, low, high, names, ch, file)))
 			return (EOF);
 		if (ch == ',')
+			/*遇到，号执行此段的下一个范围*/
 			ch = get_char(file);
 		else
 			done = TRUE;
@@ -439,7 +475,10 @@ get_list(bitstr_t *bits, int low, int high, const char *names[],
 	return (ch);
 }
 
-
+/*
+ * 按以下格式进行解析
+ * range = number | number "-" number [ "/" number ]
+ * */
 static int
 get_range(bitstr_t *bits, int low, int high, const char *names[],
 	  int ch, FILE *file)
@@ -452,14 +491,16 @@ get_range(bitstr_t *bits, int low, int high, const char *names[],
 	Debug(DPARS|DEXT, ("get_range()...entering, exit won't show\n"))
 
 	if (ch == '*') {
+		/*ch为*，则low,high均被标记为1，*/
 		/* '*' means "first-last" but can still be modified by /step
 		 */
 		num1 = low;
 		num2 = high;
-		ch = get_char(file);
+		ch = get_char(file);/*取下一个字符*/
 		if (ch == EOF)
 			return (EOF);
 	} else {
+		/*尝试按数字取*/
 		ch = get_number(&num1, low, names, ch, file, ",- \t\n");
 		if (ch == EOF)
 			return (EOF);
@@ -467,18 +508,21 @@ get_range(bitstr_t *bits, int low, int high, const char *names[],
 		if (ch != '-') {
 			/* not a range, it's a single number.
 			 */
+			/*单数字情况，将其对应的bit置为1*/
 			if (EOF == set_element(bits, low, high, num1)) {
 				unget_char(ch, file);
 				return (EOF);
 			}
 			return (ch);
 		} else {
+			/*遇到"NUM-NUM"格式*/
 			/* eat the dash
 			 */
 			ch = get_char(file);
 			if (ch == EOF)
 				return (EOF);
 
+			/*取数字2*/
 			/* get the number following the dash
 			 */
 			ch = get_number(&num2, low, names, ch, file, "/, \t\n");
@@ -490,6 +534,7 @@ get_range(bitstr_t *bits, int low, int high, const char *names[],
 	/* check for step size
 	 */
 	if (ch == '/') {
+		/*遇到'/'符，表示step,提取step*/
 		/* eat the slash
 		 */
 		ch = get_char(file);
@@ -507,7 +552,7 @@ get_range(bitstr_t *bits, int low, int high, const char *names[],
 	} else {
 		/* no step.  default==1.
 		 */
-		num3 = 1;
+		num3 = 1;/*默认step为1*/
 	}
 
 	/* range. set all elements from num1 to num2, stepping
@@ -516,6 +561,7 @@ get_range(bitstr_t *bits, int low, int high, const char *names[],
 	 * designed then implemented by paul vixie).
 	 */
 	for (i = num1;  i <= num2;  i += num3)
+		/*以num3为步进，从num1,num2设置标记*/
 		if (EOF == set_element(bits, low, high, i)) {
 			unget_char(ch, file);
 			return (EOF);
@@ -534,6 +580,7 @@ get_number(int *numptr, int low, const char *names[], int ch, FILE *file,
 	len = 0;
 
 	/* first look for a number */
+	/*按数字取此位置上的token*/
 	while (isdigit((unsigned char)ch)) {
 		if (++len >= MAX_TEMPSTR)
 			goto bad;
@@ -545,7 +592,9 @@ get_number(int *numptr, int low, const char *names[], int ch, FILE *file,
 		/* got a number, check for valid terminator */
 		if (!strchr(terms, ch))
 			goto bad;
-		*numptr = atoi(temp);
+		*numptr = atoi(temp);/*将此数字转换为数字*/
+
+		/*返回下一个输入字符*/
 		return (ch);
 	}
 
@@ -583,6 +632,7 @@ set_element(bitstr_t *bits, int low, int high, int number) {
 	if (number < low || number > high)
 		return (EOF);
 
+	/*将number对应的那一位置为1*/
 	bit_set(bits, (number-low));
 	return (OK);
 }

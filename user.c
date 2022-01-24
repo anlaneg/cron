@@ -84,6 +84,7 @@ load_user(int crontab_fd, struct passwd	*pw, const char *name) {
 			u = NULL;
 			goto done;
 		case FALSE:
+			/*加载此用户的job配置*/
 			e = load_entry(file, NULL, pw, envp);
 			if (e) {
 				e->next = u->crontab;

@@ -22,13 +22,13 @@
 typedef	struct _entry {
 	struct _entry	*next;
 	struct passwd	*pwd;
-	char		**envp;
+	char		**envp;/*命令对应的环境变量*/
 	char		*cmd;
-	bitstr_t	bit_decl(minute, MINUTE_COUNT);
-	bitstr_t	bit_decl(hour,   HOUR_COUNT);
-	bitstr_t	bit_decl(dom,    DOM_COUNT);
-	bitstr_t	bit_decl(month,  MONTH_COUNT);
-	bitstr_t	bit_decl(dow,    DOW_COUNT);
+	bitstr_t	bit_decl(minute, MINUTE_COUNT);/*minute占用60bit,换算成字节*/
+	bitstr_t	bit_decl(hour,   HOUR_COUNT);/*hour占用25bit*/
+	bitstr_t	bit_decl(dom,    DOM_COUNT);/*day of month占用 32bit*/
+	bitstr_t	bit_decl(month,  MONTH_COUNT);/*month占用13bit*/
+	bitstr_t	bit_decl(dow,    DOW_COUNT);/*day of week占用 8bit*/
 	int		flags;
 #define	MIN_STAR	0x01
 #define	HR_STAR		0x02

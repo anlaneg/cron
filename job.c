@@ -30,6 +30,7 @@ typedef	struct _job {
 
 static job	*jhead = NULL, *jtail = NULL;
 
+/*将job加入*/
 void
 job_add(entry *e, user *u) {
 	job *j;
@@ -54,6 +55,7 @@ job_add(entry *e, user *u) {
 	jtail = j;
 }
 
+/*执行找到的job*/
 int
 job_runqueue(void) {
 	job *j, *jn;

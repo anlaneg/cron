@@ -45,6 +45,7 @@ do_command(entry *e, user *u) {
 	case 0:
 		/* child process */
 		acquire_daemonlock(1);
+		/*促使子进程运行job*/
 		child_process(e, u);
 		Debug(DPROC, ("[%ld] child process done, exiting\n",
 			      (long)getpid()))
@@ -266,6 +267,7 @@ child_process(entry *e, user *u) {
 				_exit(OK_EXIT);
 			}
 # endif /*DEBUGGING*/
+			/*通过shell执行此命令*/
 			execle(shell, shell, "-c", e->cmd, (char *)0, e->envp);
 			fprintf(stderr, "execl: couldn't exec `%s'\n", shell);
 			perror("execl");

@@ -135,7 +135,9 @@ load_env(char *envstr, FILE *f) {
 
 	filepos = ftell(f);
 	fileline = LineNumber;
+	/*跳过注释行*/
 	skip_comments(f);
+	/*读取一行数据*/
 	if (EOF == get_string(envstr, MAX_ENVSTR, f, "\n"))
 		return (ERR);
 
@@ -152,43 +154,52 @@ load_env(char *envstr, FILE *f) {
 		case NAMEI:
 		case VALUEI:
 			if (*c == '\'' || *c == '"')
+				/*遇到单引或者比引，记录当前遇到的引号*/
 				quotechar = *c++;
+			/*转下一个状态*/
 			state++;
 			/* FALLTHROUGH */
 		case NAME:
 		case VALUE:
 			if (quotechar) {
+				/*引用不是'\0',如果当前遇到引用结束，则状态加1，跳过此引用符*/
 				if (*c == quotechar) {
 					state++;
 					c++;
 					break;
 				}
+				/*当前状态为=,但状态仍为Name,则报错*/
 				if (state == NAME && *c == '=') {
 					state = ERROR;
 					break;
 				}
 			} else {
+				/*当前为Name状态，如果遇到空字符，则跳过，且状态加1*/
 				if (state == NAME) {
 					if (isspace((unsigned char)*c)) {
 						c++;
 						state++;
 						break;
 					}
+					/*如果遇到=号符，则状态加1*/
 					if (*c == '=') {
 						state++;
 						break;
 					}
 				}
 			}
+			/*复制name*/
 			*str++ = *c++;
 			break;
 
 		case EQ1:
+			/*当前为EQ1状态，切换状态，并更新str,准备复制*/
 			if (*c == '=') {
 				state++;
 				str = val;
 				quotechar = '\0';
 			} else {
+				/*遇到非空符，报错*/
 				if (!isspace((unsigned char)*c))
 					state = ERROR;
 			}
@@ -197,6 +208,7 @@ load_env(char *envstr, FILE *f) {
 
 		case EQ2:
 		case FINI:
+			/*遇到空字符，消费字符，状态不变化，否则直接变更状态*/
 			if (isspace((unsigned char)*c))
 				c++;
 			else
@@ -207,12 +219,16 @@ load_env(char *envstr, FILE *f) {
 			abort();
 		}
 	}
+
+	/*状态有误，但其不为fini,确认非环境变量，返回false，进行cron配置识别*/
 	if (state != FINI && !(state == VALUE && !quotechar)) {
 		Debug(DPARS, ("load_env, not an env var, state = %d\n", state))
-		fseek(f, filepos, 0);
+		fseek(f, filepos, 0);/*回退到上一行结尾*/
 		Set_LineNum(fileline);
 		return (FALSE);
 	}
+
+	/*消除结尾的空格*/
 	if (state == VALUE) {
 		/* End of unquoted value: trim trailing whitespace */
 		c = val + strlen(val);
@@ -226,8 +242,10 @@ load_env(char *envstr, FILE *f) {
 	 * This can't overflow because get_string() limited the size of the
 	 * name and val fields.  Still, it doesn't hurt to be careful...
 	 */
+	/*将name,value通过=号连接起来*/
 	if (!glue_strings(envstr, MAX_ENVSTR, name, val, '='))
 		return (FALSE);
+	/*执行envstr显示*/
 	Debug(DPARS, ("load_env, <%s> <%s> -> <%s>\n", name, val, envstr))
 	return (TRUE);
 }
