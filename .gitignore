@@ -2,3 +2,6 @@ cron
 crontab
 kit
 *.o
+.cproject
+.project
+.settings/
